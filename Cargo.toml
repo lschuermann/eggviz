@@ -1,0 +1,24 @@
+[package]
+name = "eggviz"
+version = "0.1.0"
+edition = "2021"
+authors = [
+    "Leon Schuermann <lschuermann@princeton.edu>",
+    "Ryan Torok <rt3811@princeton.edu>",
+]
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+lto = true
+
+[dependencies]
+# Misc WebAssembly support crates
+wasm-bindgen = "0.2.83"
+web-sys = { version = "0.3.22", features = [ "console" ] }
+console_error_panic_hook = "0.1.5"
+js-sys = "0.3.60"
+
+# E-graphs good
+egg = { version = "0.9.1", features = [ "wasm-bindgen" ] }
