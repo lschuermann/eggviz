@@ -1,0 +1,76 @@
+name: eggviz-ci
+env:
+  TERM: xterm # Makes tput work in actions output
+
+on:
+  push: # Run CI for pushes on any branch
+  pull_request: # Run CI for PRs on any branch
+
+permissions:
+  contents: read
+
+jobs:
+  check-rustfmt:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1 # pulls version from rust-toolchain file
+        with:
+          components: rustfmt
+
+      - name: Check Rustfmt
+        run: cargo fmt -- --check
+
+  check-js-beautify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Install NodeJS dependencies
+        run: npm install
+
+      - name: Format with js-beautify
+        run: npx js-beautify -r js/*
+
+      - name: Display git diff and error if there are unstaged changes
+        run: |
+          git diff --exit-code
+
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - uses: actions-rs/toolchain@v1 # pulls version from rust-toolchain file
+        with:
+          components: rustfmt
+
+      - name: Install NodeJS dependencies
+        run: npm install
+
+      - name: Build the project
+        run: npm run build

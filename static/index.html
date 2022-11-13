@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0" />
+
+    <title>eggviz: E-graph Visualizer</title>
+
+    <style>
+      body {
+          height: 100%;
+          width: 100%;
+      }
+
+      #hd-rewrite-rules {
+          font-weight: bold;
+          margin: 5px 0 5px 10px;
+      }
+
+      .row {
+          margin-bottom: 0;
+      }
+
+      #bottom {
+          height: calc(100vh - 80px);
+          display: flex;
+      }
+
+      #left {
+          width: 40em;
+          height: 100%;
+          background-color: white;
+          overflow-y: scroll;
+      }
+
+      #right {
+          width: calc(100vw - 320px);
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          background-color: black;
+      }
+
+      #topbar {
+          height: 80px;
+          background-color: #e1f5fe;
+          padding: 10px 10px 10px 10px;
+          margin-bottom: 0;
+      }
+
+      #program-input {
+          display: flex;
+          width: 100%;
+          margin-right: 10px;
+          font-size: 15pt;
+          align-items: center;
+      }
+
+      #program-input span {
+          padding-left: 15px;
+          padding-right: 15px;
+          font-weight: bold;
+      }
+
+      #program-input input {
+          padding-top: 7px;
+          font-family: monospace;
+      }
+
+      #start-reset, #add-rwr, #clear-rwr {
+          width: 100%;
+          /* Don't capitalize button labels */
+          text-transform: None;
+          color: black;
+      }
+
+      #egraph {
+          position: relative;
+          width: 100%;
+          flex: 1;
+          background: white;
+      }
+
+      #toolbar {
+          box-sizing: border-box;
+          border-top: 1px solid black;
+          background-color: white;
+          height: 32px;
+          margin-top: -5px;
+          padding-left: 6px;
+          padding-top: 3px;
+      }
+
+      #toolbar p {
+          margin: 0;
+      }
+
+      .green {
+          background-color: #00b300
+      }
+
+      .red {
+          background-color: #f66151
+      }
+
+      #start-reset-row {
+          margin-top: 10px;
+      }
+
+      #start-reset {
+          color: black;
+      }
+    </style>
+
+    <script type="module" src="index.js">
+    </script>
+  </head>
+
+  <body>
+    <div id="topbar">
+      <div class="row">
+        <div class="col s12">
+          <div id="program-input">
+            <span>Program:</span>
+                <input
+                  id="program"
+                  type="text"
+                  class="validate"
+                  value="(+ (* x 2) (* y 2))"
+                  onchange="modify_program(event)"
+                  oninput="this.onchange()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="bottom">
+      <div id="left">
+        <div class="row" id="start-reset-row">
+          <div id="start-rwr" class="col s12">
+            <button
+                  class="btn green lighten-2"
+                  id="start-reset"
+                  onclick="start_reset()"
+                  disabled="">
+                  Graph!
+                </button>
+          </div>
+        </div>
+
+        <h5 id="hd-rewrite-rules">Rewrite Rules</h5>
+
+        <div class="sets" id="rwr">
+          <div id="bot-buttons" class="row">
+            <div class="col s6">
+              <button
+                    class="btn cyan lighten-2"
+                    id="add-rwr"
+                    onclick="add_rwr(event)">
+                    Add
+                  </button>
+            </div>
+            <div class="col s6">
+              <button
+                    class="btn cyan lighten-2"
+                    id="clear-rwr"
+                    onclick="clear_rwr(event)">
+                    Clear
+                  </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="right">
+            <div id="egraph">
+            </div>
+
+            <div id="toolbar">
+          <p id="footer">
+            Write your program in the top bar, add some rewrite rules on the
+                left pane, then press the graph button!
+          </p>
+            </div>
+      </div>
+    </div>
+  </body>
+</html>
