@@ -63,7 +63,10 @@ impl Term {
             Term::Invocation(f, args) => {
                 let mut s = String::from("(");
                 s.push_str(&f.name);
-                args.iter().for_each(|a| s.push_str(&a.to_egg()));
+                args.iter().for_each(|a| {
+                    s.push_str(" ");
+                    s.push_str(&a.to_egg())
+                });
                 s.push(')');
                 s
             }
