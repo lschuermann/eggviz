@@ -2,12 +2,12 @@ import 'materialize-css/dist/css/materialize.min.css';
 import 'materialize-css/dist/js/materialize.min';
 
 import("../pkg/index.js").catch(console.error).then(wasm_module => {
+    // For debugging purposes, we export the loaded WASM module into the global
+    // window object:
+    window.eggviz = wasm_module;
 
-    let {
-        start_graph,
-        poll_change,
-        can_poll_change,
-        run_runtime
+    const {
+        LispylangEggvizRuntime
     } = wasm_module;
 
     var in_graph = false;
@@ -127,7 +127,7 @@ import("../pkg/index.js").catch(console.error).then(wasm_module => {
             // Time for magic!
             var runtime;
             try {
-                runtime = start_graph(program, rwrs);
+                runtime = LispylangEggvizRuntime.new(program, rwrs);
             } catch (ex) {
                 let footer = document.getElementById("footer");
                 footer.style = "color: red";
@@ -137,12 +137,6 @@ import("../pkg/index.js").catch(console.error).then(wasm_module => {
             }
             footer.style = "color: black";
             footer.textContent = "Write your program in the top bar, add some rewrite rules on the left pane, then press the graph button!";
-            while (can_poll_change(runtime)) {
-                let msg = poll_change(runtime);
-                console.log(msg);
-            }
-            console.log("here!");
-
         } else {
             // Remove graph and re-enable program/rwr panes
             document.getElementById("add-rwr").removeAttribute("disabled");
