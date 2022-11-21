@@ -2,6 +2,7 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::iter::Peekable;
 use std::str::Chars;
 
+use crate::EggvizLanguage;
 use crate::EggvizProgram;
 use crate::EggvizProgramParseError;
 use crate::EggvizRewriteRule;
@@ -49,6 +50,12 @@ impl egg::FromOp for Language {
             function: op.to_string(),
             children,
         })
+    }
+}
+
+impl EggvizLanguage for Language {
+    fn get_function_name(&self) -> &str {
+        &self.function
     }
 }
 
