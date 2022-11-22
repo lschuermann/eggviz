@@ -1,6 +1,7 @@
 use std::cell::RefCell;
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, LinkedList};
 use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -176,25 +177,27 @@ pub struct EggvizSingleStepSchedulerState(Rc<RefCell<EggvizSingleStepSchedulerIn
 
 pub struct EggvizSingleStepSchedulerInnerState {
     target_iteration: usize,
-    rewrite_target: EggvizRewriteRuleLabel,
-    latest_iteration: usize,
+    rewrite_target: Option<EggvizRewriteRuleLabel>,
+    applied_rules: LinkedList<EggvizRewriteRuleLabel>,
 }
 
 impl EggvizSingleStepSchedulerState {
-    pub fn rewrite_rule<'a, L: egg::Language + 'a, IterData: egg::IterationData<L, ()>>(
+    pub fn rewrite<'a, L: egg::Language + 'a, IterData: egg::IterationData<L, ()>>(
         &self,
         runner: &mut egg::Runner<L, (), IterData>,
         rewrite_rules: impl IntoIterator<Item = &'a egg::Rewrite<L, ()>>,
-        rule: EggvizRewriteRuleLabel,
-    ) {
+        iters: NonZeroUsize,
+        rule: Option<EggvizRewriteRuleLabel>,
+    ) -> LinkedList<EggvizRewriteRuleLabel> {
         // Set the rule to apply in the state, and apply it only in the next
+
         // iteration (enforced for the first iteration by wrapping from
         // usize::MAX to 0):
         {
             let mut state = self.0.borrow_mut();
             state.rewrite_target = rule;
-            state.latest_iteration = runner.iterations.len().wrapping_sub(1);
-            state.target_iteration = runner.iterations.len();
+            let latest_iteration = runner.iterations.len().wrapping_sub(1);
+            state.target_iteration = latest_iteration.wrapping_add(iters.get());
         }
 
         // Get ownership of the runner by swapping it out with a default value.
@@ -216,6 +219,40 @@ impl EggvizSingleStepSchedulerState {
 
         // Put the runner back, we are done.
         std::mem::swap(&mut owned_runner, runner);
+
+        {
+            let mut state = self.0.borrow_mut();
+
+            // Swap the list of applied rules out to return and clear it:
+            let mut applied_rules = LinkedList::new();
+            std::mem::swap(&mut applied_rules, &mut state.applied_rules);
+
+            applied_rules
+        }
+    }
+
+    pub fn rewrite_rule<'a, L: egg::Language + 'a, IterData: egg::IterationData<L, ()>>(
+        &self,
+        runner: &mut egg::Runner<L, (), IterData>,
+        rewrite_rules: impl IntoIterator<Item = &'a egg::Rewrite<L, ()>>,
+        rule: EggvizRewriteRuleLabel,
+    ) -> bool {
+        let applied_rules = self.rewrite(
+            runner,
+            rewrite_rules,
+            NonZeroUsize::new(1).unwrap(),
+            Some(rule.clone()),
+        );
+
+        let rule_count = applied_rules
+            .into_iter()
+            .map(|applied_rule| {
+                assert!(applied_rule == rule);
+            })
+            .count();
+
+        assert!(rule_count < 2);
+        rule_count > 0
     }
 }
 
@@ -235,8 +272,8 @@ impl EggvizSingleStepScheduler {
     pub fn initial_state() -> EggvizSingleStepSchedulerState {
         EggvizSingleStepSchedulerState(Rc::new(RefCell::new(EggvizSingleStepSchedulerInnerState {
             target_iteration: 0,
-            rewrite_target: EggvizRewriteRuleLabel::Indexed(usize::MAX),
-            latest_iteration: usize::MAX,
+            rewrite_target: None,
+            applied_rules: LinkedList::new(),
         })))
     }
 }
@@ -252,14 +289,19 @@ impl<L: egg::Language, N: egg::Analysis<L>> egg::RewriteScheduler<L, N>
     ) -> Vec<egg::SearchMatches<'a, L>> {
         // Get a mutable reference to the current state. The state must not be
         // borrowed anywhere while egg is running!
-        let mut state = self.0 .0.borrow_mut();
-
-        state.latest_iteration = iteration;
+        let state = self.0 .0.borrow();
 
         if iteration > state.target_iteration {
             Vec::new()
-        } else if EggvizRewriteRuleLabel::from_str(rewrite.name.as_str()).unwrap()
-            == state.rewrite_target
+        } else if state
+            .rewrite_target
+            .as_ref()
+            .map(|target| {
+                EggvizRewriteRuleLabel::from_str(rewrite.name.as_str()).unwrap() == *target
+            })
+            // If we don't have a target rewrite rule to search for,
+            // apply all rules unconditionally:
+            .unwrap_or(true)
         {
             rewrite.search(egraph)
         } else {
@@ -274,18 +316,45 @@ impl<L: egg::Language, N: egg::Analysis<L>> egg::RewriteScheduler<L, N>
         rewrite: &egg::Rewrite<L, N>,
         matches: Vec<egg::SearchMatches<L>>,
     ) -> usize {
+        // Convert the passed egg rewrite rule into an
+        // `EggvizRewriteRuleLabel` for comparing against target rules
+        // and tracking applied rules.
+        let rewrite_label = EggvizRewriteRuleLabel::from_str(rewrite.name.as_str()).unwrap();
+
         // Get a mutable reference to the current state. The state must not be
         // borrowed anywhere while egg is running!
         let mut state = self.0 .0.borrow_mut();
 
-        state.latest_iteration = iteration;
-
         if iteration > state.target_iteration {
             0
-        } else if EggvizRewriteRuleLabel::from_str(rewrite.name.as_str()).unwrap()
-            == state.rewrite_target
+        } else if matches.len() > 0
+            && state
+                .rewrite_target
+                .as_ref()
+                .map(|target| rewrite_label == *target)
+                // If we don't have a target rewrite rule to search for,
+                // apply all rules unconditionally:
+                .unwrap_or(true)
         {
+            let (prev_nodes, prev_classes) = (
+                egraph.total_number_of_nodes(),
+                egraph.classes().filter(|eclass| !eclass.is_empty()).count(),
+            );
+
+            // Apply the rewrite rules to the graph:
             rewrite.apply(egraph, &matches);
+
+            let (new_nodes, new_classes) = (
+                egraph.total_number_of_nodes(),
+                egraph.classes().filter(|eclass| !eclass.is_empty()).count(),
+            );
+
+            // Add the rule (and how many nodes it affected) into the
+            // list of applied rules:
+            if prev_nodes != new_nodes || prev_classes != new_classes {
+                state.applied_rules.push_back(rewrite_label);
+            }
+
             matches.len()
         } else {
             0
@@ -439,7 +508,7 @@ impl<P: EggvizProgram> EggvizRuntime<P> {
         })
     }
 
-    pub fn rewrite_rule(&mut self, rule: EggvizRewriteRuleLabel) {
+    pub fn rewrite_rule(&mut self, rule: EggvizRewriteRuleLabel) -> bool {
         self.sched_state
             .rewrite_rule(&mut self.runner, self.rewrite_rules.iter(), rule)
     }
@@ -512,11 +581,19 @@ impl LispylangEggvizRuntime {
         })
     }
 
-    pub fn rewrite_rule(&mut self, rule_label: &str) -> Result<(), String> {
+    pub fn rewrite_rule(&mut self, rule_label: &str) -> Result<bool, String> {
         let parsed_label = EggvizRewriteRuleLabel::from_str(rule_label)
             .map_err(|_| format!("Unable to parse rule label \"{}\"", rule_label))?;
-        self.inner.rewrite_rule(parsed_label);
-        Ok(())
+        Ok(self.inner.rewrite_rule(parsed_label))
+    }
+
+    pub fn rewrite_auto(&mut self) -> Result<js_sys::Array, String> {
+        Ok(self
+            .inner
+            .rewrite_auto()
+            .into_iter()
+            .map(|rewrite_rule| js_sys::JsString::from(rewrite_rule.to_string()))
+            .collect())
     }
 
     pub fn dump_graph(&self) -> String {
