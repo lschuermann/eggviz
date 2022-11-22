@@ -1,5 +1,6 @@
 use std::cell::RefCell;
-use std::collections::{HashSet, LinkedList};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, LinkedList};
+use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -97,6 +98,11 @@ pub trait EggvizRewriteRule {
     fn right_to_egg(&self) -> String;
 }
 
+pub trait EggvizLanguage: egg::Language + egg::FromOp + Hash + Send + Sync + 'static {
+    /// Get the function or constant name represented by this language node:
+    fn get_function_name(&self) -> &str;
+}
+
 /// Pluggable eggviz program interface. Extends an [`egg::Language`] by
 /// factories for parsing the program and associated rewrite rules.
 pub trait EggvizProgram {
@@ -106,7 +112,7 @@ pub trait EggvizProgram {
     /// representation of the program with [`EggvizProgram::to_egg`].
     /// [`EggvizProgram::Language`] will then be used to operate on the terms
     /// produced by this method and parsed by egg.
-    type Language: egg::Language + egg::FromOp + Send + Sync + 'static;
+    type Language: EggvizLanguage;
 
     /// High-level rewrite rule representation for the [`EggvizProgram`].
     ///
@@ -507,22 +513,40 @@ impl<P: EggvizProgram> EggvizRuntime<P> {
             .rewrite_rule(&mut self.runner, self.rewrite_rules.iter(), rule)
     }
 
-    pub fn rewrite_auto(&mut self) -> Vec<EggvizRewriteRuleLabel> {
-        self.sched_state
-            .rewrite(
-                &mut self.runner,
-                self.rewrite_rules.iter(),
-                NonZeroUsize::new(1).unwrap(),
-                None,
-            )
-            .into_iter()
-            .collect()
-    }
-
-    pub fn current_graph(&self) -> String {
+    pub fn dump_graph(&self) -> String {
         // TODO: this should be changed to actually return a usable graph
         // representation. For now, just print the graph:
         format!("{:?}", self.runner.egraph.dump())
+    }
+
+    pub fn current_graph(&self) -> HashMap<String, HashMap<u64, (String, Vec<String>)>> {
+        self.runner
+            .egraph
+            .classes()
+            .map(|eclass| {
+                (
+                    eclass.id.to_string(),
+                    eclass
+                        .nodes
+                        .iter()
+                        .map(|enode| {
+                            let mut hasher = DefaultHasher::new();
+                            enode.hash(&mut hasher);
+                            (
+                                hasher.finish(),
+                                (
+                                    enode.get_function_name().to_string(),
+                                    egg::Language::children(enode)
+                                        .iter()
+                                        .map(|id| id.to_string())
+                                        .collect(),
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
     }
 }
 
@@ -572,8 +596,32 @@ impl LispylangEggvizRuntime {
             .collect())
     }
 
-    pub fn current_graph(&self) -> String {
-        self.inner.current_graph()
+    pub fn dump_graph(&self) -> String {
+        self.inner.dump_graph()
+    }
+
+    pub fn current_graph(&self) -> js_sys::Map {
+        let graph = self.inner.current_graph();
+
+        let eclasses_map = js_sys::Map::new();
+        for (eclass_id, enodes) in graph.into_iter() {
+            let enode_map = js_sys::Map::new();
+            for (enode_hash, (enode_label, children)) in enodes.into_iter() {
+                let enode_children: js_sys::Array =
+                    children.into_iter().map(js_sys::JsString::from).collect();
+
+                let enode = js_sys::Map::new();
+                enode.set(
+                    &js_sys::JsString::from("label"),
+                    &js_sys::JsString::from(enode_label),
+                );
+                enode.set(&js_sys::JsString::from("children"), &enode_children);
+
+                enode_map.set(&js_sys::Number::from(enode_hash as u32), &enode);
+            }
+            eclasses_map.set(&js_sys::JsString::from(eclass_id), &enode_map);
+        }
+        eclasses_map
     }
 }
 
