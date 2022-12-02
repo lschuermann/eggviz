@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, LinkedList};
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::rc::Rc;
@@ -26,7 +28,7 @@ pub enum EggvizRewriteRuleLabel {
     Indexed(usize),
 }
 
-impl std::fmt::Display for EggvizRewriteRuleLabel {
+impl Display for EggvizRewriteRuleLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             EggvizRewriteRuleLabel::Supplied(label) => write!(f, "rwr:{}", label),
@@ -74,6 +76,12 @@ pub enum EggvizProgramParseContext {
 pub struct EggvizProgramParseError {
     pub msg: String,
     pub context: Option<EggvizProgramParseContext>,
+}
+
+impl Display for EggvizProgramParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.msg.fmt(f)
+    }
 }
 
 impl EggvizProgramParseError {
@@ -369,6 +377,18 @@ pub enum EggvizRuntimeError {
     InternalError(String),
 }
 
+impl Display for EggvizRuntimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            EggvizRuntimeError::ParseError(e) => format!("Parsing Error: {}", e).fmt(f),
+            EggvizRuntimeError::DuplicateRewriteRuleLabel(l) => {
+                format!("Error: Rewrite rule `{}` was duplicated.", l).fmt(f)
+            }
+            EggvizRuntimeError::InternalError(e) => format!("Internal Error: {}", e).fmt(f),
+        }
+    }
+}
+
 pub struct EggvizRuntime<P: EggvizProgram> {
     rewrite_rules: Vec<egg::Rewrite<<P as EggvizProgram>::Language, ()>>,
     sched_state: EggvizSingleStepSchedulerState,
@@ -513,6 +533,15 @@ impl<P: EggvizProgram> EggvizRuntime<P> {
             .rewrite_rule(&mut self.runner, self.rewrite_rules.iter(), rule)
     }
 
+    pub fn rewrite_auto(&mut self) -> LinkedList<EggvizRewriteRuleLabel> {
+        self.sched_state.rewrite(
+            &mut self.runner,
+            &self.rewrite_rules,
+            NonZeroUsize::new(1).unwrap(),
+            None,
+        )
+    }
+
     pub fn dump_graph(&self) -> String {
         // TODO: this should be changed to actually return a usable graph
         // representation. For now, just print the graph:
@@ -577,7 +606,7 @@ impl LispylangEggvizRuntime {
                         )
                     }),
             )
-            .map_err(|e| format!("{:?}", e))?,
+            .map_err(|e| format!("{}", e))?,
         })
     }
 
