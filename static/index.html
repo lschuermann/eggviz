@@ -68,7 +68,7 @@
           font-family: monospace;
       }
 
-      #start-reset, #add-rwr, #clear-rwr {
+      #start-reset, #add-rwr, #clear-rwr, #btn-preset {
           width: 100%;
           /* Don't capitalize button labels */
           text-transform: None;
@@ -104,7 +104,7 @@
           background-color: #f66151
       }
 
-      #start-reset-row {
+      #start-reset-row, #preset-row {
           margin-top: 10px;
       }
 
@@ -127,7 +127,7 @@
                   id="program"
                   type="text"
                   class="validate"
-                  value="(+ (* x 2) (* y 2))"
+                  value=""
                   onchange="modify_program(event)"
                   oninput="this.onchange()">
           </div>
@@ -137,6 +137,18 @@
 
     <div id="bottom">
       <div id="left">
+	<div class="row" id="preset-row">
+	  <div id="preset-dropdown-cnt" class="col s12">
+	    <a id="btn-preset" class="dropdown-trigger btn col s12" href="#" data-target="preset-dropdown">
+	      Load Preset
+	    </a>
+	    <ul id="preset-dropdown" class="dropdown-content">
+	      <li><a href="#!">Empty</a></li>
+	      <li class="divider" tabindex="-1"></li>
+	      <li><a href="#!">Test Preset</a></li>
+	    </ul>
+	  </div>
+	</div>
         <div class="row" id="start-reset-row">
           <div id="start-rwr" class="col s12">
             <button
@@ -170,8 +182,6 @@
                   </button>
             </div>
           </div>
-          <!-- Add default rewrite rule --!>
-          <div class="row" style="margin-left: 1em;"><p style="font-family: monospace; font-size: 10pt; margin-top: 1em; overflow: auto; white-space: nowrap;" class="col s5">(* pa 2)</p><p class="col s1" style="font-size: 20pt; margin-top: 0px;">→</p><p style="font-family: monospace; font-size: 10pt; margin-top: 1em; overflow: auto; white-space: nowrap;" class="col s5">(&lt;&lt; pa 1)</p><button class="red col" style="text-align: center; padding-left: 0.3em; padding-right: 0.3em; margin-top: 0.5em; margin-left: 0.5em;" onclick="confirm_rwr(event)">⨯</button></div>
         </div>
       </div>
 
