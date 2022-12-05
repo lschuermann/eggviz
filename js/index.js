@@ -5,6 +5,62 @@ import 'materialize-css/dist/js/materialize.min';
 
 import * as vis from 'vis-network/dist/vis-network.esm.js';
 
+// Required initialization for materialize dropdown:
+document.addEventListener('DOMContentLoaded', function() {
+    var elems = document.querySelectorAll('.dropdown-trigger');
+    var instances = M.Dropdown.init(elems, {});
+});
+
+const presets = {
+    "Empty": {
+        program: "",
+        rewriteRules: [],
+    },
+    "(* pa 2) → (<< pa 1)": {
+        program: "(+ (* x 2) (* y 2))",
+        rewriteRules: [
+            ["(* pa 2)", "(<< pa 1)"],
+        ],
+    },
+    "if-then-else": {
+        program: "(and (if true (== (* 2 2) 4) false) (if false false (== (<< 2 1) 4)))",
+        rewriteRules: [
+            ["(and true true)", "true"],
+            ["(if true pt pf)", "pt"],
+            ["(if false pt pf)", "pf"],
+            ["(* pa 2)", "(<< pa 1)"],
+            ["(<< 2 1)", "4"],
+            ["(== pa pa)", "true"],
+        ],
+    },
+    "Pset #4": {
+        program: "(land x y (f (g (f z))) (h y x) (h w x))",
+        rewriteRules: [
+            ["x", "y"],
+            ["y", "(f z)"],
+            ["(f (g (f z)))", "(h x y)"],
+            ["(h y x)", "w"],
+            ["(h w x)", "(f (g y))"],
+        ],
+    },
+    "Congruence Closure w/ T/F + Inequalities": {
+        program: "(land (eq (f x (g y)) (g (g (g y)))) (eq (f z z) x) (eq z (g y)) (not (eq (g (f x z)) (g (g (g z))))))",
+        rewriteRules: [
+            ["(f x (g y))", "(g (g (g y)))"],
+            ["(f z z)", "x"],
+            ["z", "(g y)"],
+
+            ["(eq pa pa)", "true"],
+            ["(not true)", "false"],
+            ["(land true true true true)", "true"],
+            ["(land false pa pb pc)", "false"],
+            ["(land pa false pb pc)", "false"],
+            ["(land pa pb false pc)", "false"],
+            ["(land pa pb pc false)", "false"],
+        ],
+    },
+};
+
 import("../pkg/index.js").catch(console.error).then(wasm_module => {
     // For debugging purposes, we export the loaded WASM module into the global
     // window object:
@@ -48,6 +104,73 @@ import("../pkg/index.js").catch(console.error).then(wasm_module => {
 
     var in_graph = false;
     var runtime;
+
+    function applyPreset(presetName) {
+        const preset = presets[presetName];
+
+        // Set the program accordingly:
+        document.getElementById("program").value = preset.program;
+
+        // Remove all defined rewrite rules and add rules from the preset:
+        clear_rwr(null);
+
+        for (let [src, dest] of preset.rewriteRules) {
+            let row = document.createElement('div');
+            row.className = "row";
+            row.style = "margin-left: 1em";
+
+            let src_p = document.createElement('p');
+            src_p.style = "font-family: monospace; font-size: 10pt; margin-top: 1em; overflow: auto; white-space: nowrap";
+            src_p.className = "col s5";
+            src_p.textContent = src;
+            row.appendChild(src_p)
+
+            let arrow = document.createElement('p');
+            arrow.textContent = "→";
+            arrow.className = "col s1";
+            arrow.style = "font-size: 20pt; margin-top: 0px";
+            row.appendChild(arrow);
+
+            let dest_p = document.createElement('p');
+            dest_p.style = "font-family: monospace; font-size: 10pt; margin-top: 1em; overflow: auto; white-space: nowrap";
+            dest_p.className = "col s5";
+            dest_p.textContent = dest;
+            row.appendChild(dest_p);
+
+            let cfm = document.createElement('button');
+            cfm.className = "red col";
+            cfm.textContent = "⨯";
+            cfm.style = "text-align: center; padding-left: 0.3em; padding-right: 0.3em; margin-top: 0.5em; margin-left: 0.5em";
+            cfm.setAttribute("onclick", "confirm_rwr(event)");
+            row.appendChild(cfm);
+
+            let rwr = document.getElementById("rwr");
+            rwr.appendChild(row);
+        }
+
+        check();
+    }
+
+    function initializePresets(presets) {
+        const presetsUl = document.getElementById("preset-dropdown");
+        while (presetsUl.firstChild) {
+            presetsUl.removeChild(presetsUl.firstChild);
+        }
+
+        for (let [presetName, preset] of Object.entries(presets)) {
+            let presetA = document.createElement('a');
+            presetA.href = "#!";
+            presetA.innerHTML = presetName;
+            presetA.onclick = (() => applyPreset(presetName));
+
+            let presetLi = document.createElement('li');
+            presetLi.appendChild(presetA);
+
+            presetsUl.appendChild(presetLi);
+        }
+    }
+
+    initializePresets(presets);
 
     function colorWheel(id) {
         let rotation = id % 3;
@@ -299,6 +422,9 @@ import("../pkg/index.js").catch(console.error).then(wasm_module => {
         in_graph = !in_graph;
         if (in_graph) {
             // Start graphing!
+            let btn_preset = document.getElementById("btn-preset");
+            btn_preset.setAttribute("disabled", "true");
+
             let btn_add_rwr = document.getElementById("add-rwr");
             btn_add_rwr.textContent = "← Previous"
             btn_add_rwr.className = btn_add_rwr.className.replace("cyan", "green");
@@ -344,6 +470,10 @@ import("../pkg/index.js").catch(console.error).then(wasm_module => {
         } else {
             // Remove graph and re-enable program/rwr panes
             clearGraph();
+
+            let btn_preset = document.getElementById("btn-preset");
+            btn_preset.removeAttribute("disabled");
+
             let btn_add_rwr = document.getElementById("add-rwr");
             btn_add_rwr.textContent = "Add"
             btn_add_rwr.className = btn_add_rwr.className.replace("green", "cyan");
